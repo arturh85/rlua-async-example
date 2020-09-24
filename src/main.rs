@@ -1,35 +1,23 @@
-use rlua::{Lua};
+use rlua::Lua;
 use rlua_async::{ChunkExt, ContextExt};
 
-#[actix_rt::main]
-async fn main() {
-    let lua_code = "my.asyncfunc(42)";
+fn main() -> rlua::Result<()> {
     let lua = Lua::new();
-
-    lua.context(|lua_ctx| {
-        let globals = lua_ctx.globals();
-        let map_table = lua_ctx.create_table().unwrap();
-        map_table
-            .set(
-                "asyncfunc",
-                lua_ctx
-                    .create_async_function(
-                        |_ctx,
-                         param:
-                            u32
-                        | async move {
-                            println!("async function called {}", param);
-                            Ok(())
-                        }).unwrap()).unwrap();
-
-        globals.set("my", map_table).unwrap();
-    });
-
-    lua.context(|lua_context| async move {
-        let chunk = lua_context
-            .load(&lua_code);
-        chunk.exec_async(lua_context).await.unwrap();
-    })
-        .await;
-    println!("finished");
+    lua.context(|ctx| {
+        let globals = ctx.globals();
+        let map_table = ctx.create_table()?;
+        map_table.set(
+            "asyncfunc",
+            ctx.create_async_function(|_ctx, param: u32| async move {
+                println!("async function called {}", param);
+                Ok(())
+            })?,
+        )?;
+        globals.set("my", map_table)?;
+        let chunk = ctx.load("my.asyncfunc(42)");
+        tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(chunk.exec_async(ctx))
+    })?;
+    Ok(())
 }
